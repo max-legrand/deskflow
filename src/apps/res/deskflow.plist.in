@@ -39,6 +39,12 @@
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
 
+	<!-- Prevent App Nap from throttling Deskflow when in the background.
+	     Deskflow must remain responsive to relay mouse/keyboard events even
+	     when the user is interacting with a different machine's screen. -->
+	<key>LSAppNapIsDisabled</key>
+	<true/>
+
 	<!-- Local Lan Entitlements -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app uses local network permissions for communication between a Deskflow server and clients.</string>

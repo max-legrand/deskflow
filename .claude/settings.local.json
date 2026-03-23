@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(h|cpp\\)$\")",
+      "Bash(cmake --build /Users/max/Documents/deskflow/build --target arch --target net)",
+      "Bash(cmake --build /Users/max/Documents/deskflow/build)"
+    ]
+  }
+}

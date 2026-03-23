@@ -32,6 +32,7 @@
 #include "platform/OSXScreenSaver.h"
 
 #include <AppKit/NSEvent.h>
+#include <Foundation/NSProcessInfo.h>
 #include <AvailabilityMacros.h>
 #include <IOKit/hidsystem/event_status_driver.h>
 #include <libproc.h>
@@ -105,6 +106,13 @@ OSXScreen::OSXScreen(IEventQueue *events, bool isPrimary, bool enableLangSync)
       m_events(events),
       m_impl(nullptr)
 {
+  // Disable App Nap so macOS doesn't throttle Deskflow while in the
+  // background. This is critical because Deskflow relays input events
+  // even when the user is interacting with a different machine's screen.
+  [[NSProcessInfo processInfo]
+      beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep
+                        reason:@"Relaying mouse and keyboard events to remote machines"];
+
   m_displayID = CGMainDisplayID();
   if (!updateScreenShape(m_displayID, 0)) {
     throw DisplayInvalidException("failed to initialize screen shape");
@@ -1044,10 +1052,11 @@ bool OSXScreen::onKey(CGEventRef event)
 
   // Special handling to track state of modifiers
   if (eventKind == kCGEventFlagsChanged) {
-    // get old and new modifier state
+    // get old and new modifier state, passing the virtual key so we can
+    // distinguish left from right modifier keys
     KeyModifierMask oldMask = getActiveModifiers();
     KeyModifierMask newMask = m_keyState->mapModifiersFromOSX(macMask);
-    m_keyState->handleModifierKeys(getEventTarget(), oldMask, newMask);
+    m_keyState->handleModifierKeys(getEventTarget(), oldMask, newMask, virtualKey);
 
     // if the current set of modifiers exactly matches a modifiers-only
     // hot key then generate a hot key down event.

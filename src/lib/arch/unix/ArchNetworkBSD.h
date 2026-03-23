@@ -87,6 +87,7 @@ public:
   void throwErrorOnSocket(ArchSocket) override;
   bool setNoDelayOnSocket(ArchSocket, bool noDelay) override;
   bool setReuseAddrOnSocket(ArchSocket, bool reuse) override;
+  void setLowLatencyOnSocket(ArchSocket) override;
   ArchNetAddress newAnyAddr(AddressFamily) override;
   ArchNetAddress copyAddr(ArchNetAddress) override;
   std::vector<ArchNetAddress> nameToAddr(const std::string &) override;

@@ -232,6 +232,14 @@ public:
   */
   virtual bool setReuseAddrOnSocket(ArchSocket, bool reuse) = 0;
 
+  //! Set low-latency socket options
+  /*!
+  Configures the socket for interactive, low-latency traffic by setting
+  IP_TOS/DSCP for QoS marking (and SO_NET_SERVICE_TYPE on macOS) and
+  reducing socket buffer sizes to minimize bufferbloat.
+  */
+  virtual void setLowLatencyOnSocket(ArchSocket) = 0;
+
   //! Create an "any" network address
   virtual ArchNetAddress newAnyAddr(AddressFamily) = 0;
 
