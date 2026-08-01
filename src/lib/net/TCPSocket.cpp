@@ -283,6 +283,11 @@ void TCPSocket::init()
     // that should be sent without (much) delay.  for example, the
     // mouse motion messages are much less useful if they're delayed.
     ARCH->setNoDelayOnSocket(m_socket, true);
+
+    // set QoS marking and reduce buffer sizes for low-latency interactive
+    // traffic. this is especially important on WiFi where unmarked packets
+    // are treated as best-effort and large buffers cause bufferbloat.
+    ARCH->setLowLatencyOnSocket(m_socket);
   } catch (const ArchNetworkException &e) {
     try {
       ARCH->closeSocket(m_socket);

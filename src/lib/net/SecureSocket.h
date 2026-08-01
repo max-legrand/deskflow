@@ -10,8 +10,10 @@
 #include "net/SecurityLevel.h"
 #include "net/TCPSocket.h"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 class Event;
 class IEventQueue;
@@ -96,4 +98,18 @@ private:
   bool m_secureReady = false;
   bool m_fatal = false;
   SecurityLevel m_securityLevel = SecurityLevel::Encrypted;
+
+  // Retry state for the "want read"/"want write" paths.  These must be
+  // per-socket: they were previously function-local statics, which meant a
+  // stalled or closed connection could leave a non-zero retry count behind
+  // that a different SecureSocket then observed.
+  int m_readRetry = 0;
+  int m_writeRetry = 0;
+  int m_acceptRetry = 0;
+  int m_connectRetry = 0;
+
+  // Pending unwritten payload for doWrite().  Also previously a shared static
+  // buffer, which allowed one socket's bytes to be written to another's stream.
+  std::vector<uint8_t> m_writeBuffer;
+  bool m_writeRetryPending = false;
 };

@@ -557,6 +557,13 @@ size_t ArchNetworkWinsock::writeSocket(ArchSocket s, const void *buf, size_t len
   return static_cast<size_t>(n);
 }
 
+void ArchNetworkWinsock::setPollWriteOnSocket(ArchSocket s, bool pollWrite)
+{
+  assert(s != nullptr);
+
+  s->m_pollWrite = pollWrite;
+}
+
 void ArchNetworkWinsock::throwErrorOnSocket(ArchSocket s)
 {
   assert(s != nullptr);
@@ -603,6 +610,18 @@ bool ArchNetworkWinsock::setNoDelayOnSocket(ArchSocket s, bool noDelay)
   }
 
   return (oflag != 0);
+}
+
+void ArchNetworkWinsock::setLowLatencyOnSocket(ArchSocket s)
+{
+  assert(s != nullptr);
+
+  // Set IP_TOS to IPTOS_LOWDELAY for low-latency QoS marking.
+  // WiFi access points with WMM will prioritize these packets.
+  int tos = 0x10; // IPTOS_LOWDELAY
+  int size = sizeof(tos);
+  // best-effort: ignore failure since not all platforms support this
+  setsockopt_winsock(s->m_socket, IPPROTO_IP, IP_TOS, &tos, size);
 }
 
 bool ArchNetworkWinsock::setReuseAddrOnSocket(ArchSocket s, bool reuse)

@@ -364,6 +364,15 @@ size_t ArchNetworkBSD::writeSocket(ArchSocket s, const void *buf, size_t len)
   return n;
 }
 
+void ArchNetworkBSD::setPollWriteOnSocket(ArchSocket s, bool)
+{
+  assert(s != nullptr);
+
+  // nothing to do: poll() is level-triggered, so a socket that cannot accept
+  // a write simply won't report POLLOUT.  There is no "assume writable" state
+  // to correct here.
+}
+
 void ArchNetworkBSD::throwErrorOnSocket(ArchSocket s)
 {
   assert(s != nullptr);
@@ -417,6 +426,28 @@ bool ArchNetworkBSD::setNoDelayOnSocket(ArchSocket s, bool noDelay)
   }
 
   return (oflag != 0);
+}
+
+void ArchNetworkBSD::setLowLatencyOnSocket(ArchSocket s)
+{
+  assert(s != nullptr);
+
+  // Set IP_TOS to IPTOS_LOWDELAY for low-latency QoS marking.
+  // WiFi access points with WMM will prioritize these packets.
+  int tos = 0x10; // IPTOS_LOWDELAY
+  socklen_t size = static_cast<socklen_t>(sizeof(tos));
+  // best-effort: ignore failure since not all platforms support this
+  setsockopt(s->m_fd, IPPROTO_IP, IP_TOS, reinterpret_cast<optval_t *>(&tos), size);
+
+#if defined(__APPLE__)
+  // On macOS, SO_NET_SERVICE_TYPE tells the WiFi stack which Access Category
+  // to use. NET_SERVICE_TYPE_VI (Interactive Video) maps to AC_VI which gets
+  // priority scheduling over best-effort traffic on WiFi.
+  int serviceType = NET_SERVICE_TYPE_VI;
+  size = static_cast<socklen_t>(sizeof(serviceType));
+  setsockopt(s->m_fd, SOL_SOCKET, SO_NET_SERVICE_TYPE, reinterpret_cast<optval_t *>(&serviceType), size);
+#endif
+
 }
 
 bool ArchNetworkBSD::setReuseAddrOnSocket(ArchSocket s, bool reuse)
