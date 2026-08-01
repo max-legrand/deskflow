@@ -364,6 +364,15 @@ size_t ArchNetworkBSD::writeSocket(ArchSocket s, const void *buf, size_t len)
   return n;
 }
 
+void ArchNetworkBSD::setPollWriteOnSocket(ArchSocket s, bool)
+{
+  assert(s != nullptr);
+
+  // nothing to do: poll() is level-triggered, so a socket that cannot accept
+  // a write simply won't report POLLOUT.  There is no "assume writable" state
+  // to correct here.
+}
+
 void ArchNetworkBSD::throwErrorOnSocket(ArchSocket s)
 {
   assert(s != nullptr);

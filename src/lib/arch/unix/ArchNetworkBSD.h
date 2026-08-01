@@ -84,6 +84,7 @@ public:
   void unblockPollSocket(ArchThread thread) override;
   size_t readSocket(ArchSocket s, void *buf, size_t len) override;
   size_t writeSocket(ArchSocket s, const void *buf, size_t len) override;
+  void setPollWriteOnSocket(ArchSocket s, bool pollWrite) override;
   void throwErrorOnSocket(ArchSocket) override;
   bool setNoDelayOnSocket(ArchSocket, bool noDelay) override;
   bool setReuseAddrOnSocket(ArchSocket, bool reuse) override;

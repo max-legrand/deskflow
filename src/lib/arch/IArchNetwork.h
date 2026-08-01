@@ -211,6 +211,19 @@ public:
   */
   virtual size_t writeSocket(ArchSocket s, const void *buf, size_t len) = 0;
 
+  //! Mark socket as blocked (or unblocked) for writing
+  /*!
+  Tells the implementation whether \c pollSocket() must genuinely wait for
+  \c s to become writable.  \c writeSocket() maintains this itself, so this
+  is only needed by callers that write to the socket by some other route
+  (e.g. OpenSSL, which owns the descriptor via SSL_set_fd) and therefore
+  discover "would block" without going through \c writeSocket().  Without
+  it, an implementation that assumes writability until told otherwise will
+  spin in \c pollSocket() with a zero timeout.  No-op where \c pollSocket()
+  is level-triggered.
+  */
+  virtual void setPollWriteOnSocket(ArchSocket s, bool pollWrite) = 0;
+
   //! Check error on socket
   /*!
   If the socket \c s is in an error state then throws an appropriate

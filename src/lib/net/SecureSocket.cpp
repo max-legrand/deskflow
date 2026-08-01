@@ -8,6 +8,7 @@
 #include "SecureSocket.h"
 #include "SecureUtils.h"
 
+#include "arch/Arch.h"
 #include "arch/ArchException.h"
 #include "base/IEventQueue.h"
 #include "base/Log.h"
@@ -166,26 +167,21 @@ TCPSocket::JobResult SecureSocket::doRead()
 TCPSocket::JobResult SecureSocket::doWrite()
 {
   using enum JobResult;
-  static bool s_retry = false;
-  static int s_retrySize = 0;
-  static int s_staticBufferSize = 0;
-  static void *s_staticBuffer = nullptr;
 
   // write data
   int bufferSize = 0;
   int bytesWrote = 0;
   int status = 0;
 
-  if (s_retry) {
-    bufferSize = s_retrySize;
+  if (m_writeRetryPending) {
+    // re-send the exact same buffer.  OpenSSL requires that a retried
+    // SSL_write() is passed identical arguments to the call that failed.
+    bufferSize = static_cast<int>(m_writeBuffer.size());
   } else {
     bufferSize = m_outputBuffer.getSize();
+    m_writeBuffer.resize(bufferSize);
     if (bufferSize != 0) {
-      if (bufferSize > s_staticBufferSize) {
-        s_staticBuffer = realloc(s_staticBuffer, bufferSize);
-        s_staticBufferSize = bufferSize;
-      }
-      memcpy(s_staticBuffer, m_outputBuffer.peek(bufferSize), bufferSize);
+      memcpy(m_writeBuffer.data(), m_outputBuffer.peek(bufferSize), bufferSize);
     }
   }
 
@@ -194,14 +190,13 @@ TCPSocket::JobResult SecureSocket::doWrite()
   }
 
   if (isSecureReady()) {
-    status = secureWrite(s_staticBuffer, bufferSize, bytesWrote);
+    status = secureWrite(m_writeBuffer.data(), bufferSize, bytesWrote);
     if (status > 0) {
-      s_retry = false;
+      m_writeRetryPending = false;
     } else if (status < 0) {
       return Break;
     } else if (status == 0) {
-      s_retry = true;
-      s_retrySize = bufferSize;
+      m_writeRetryPending = true;
       return New;
     }
   } else {
@@ -224,12 +219,10 @@ int SecureSocket::secureRead(void *buffer, int size, int &read)
     LOG_DEBUG2("reading secure socket");
     read = SSL_read(m_ssl->m_ssl, buffer, size);
 
-    static int retry;
-
     // Check result will cleanup the connection in the case of a fatal
-    checkResult(read, retry);
+    checkResult(read, m_readRetry);
 
-    if (retry) {
+    if (m_readRetry) {
       return 0;
     }
 
@@ -252,12 +245,10 @@ int SecureSocket::secureWrite(const void *buffer, int size, int &wrote)
 
     wrote = SSL_write(m_ssl->m_ssl, buffer, size);
 
-    static int retry;
-
     // Check result will cleanup the connection in the case of a fatal
-    checkResult(wrote, retry);
+    checkResult(wrote, m_writeRetry);
 
-    if (retry) {
+    if (m_writeRetry) {
       return 0;
     }
 
@@ -418,9 +409,7 @@ int SecureSocket::secureAccept(int socket)
   LOG_DEBUG2("accepting secure socket");
   int r = SSL_accept(m_ssl->m_ssl);
 
-  static int retry;
-
-  checkResult(r, retry);
+  checkResult(r, m_acceptRetry);
 
   if (isFatal()) {
     // tell user and sleep so the socket isn't hammered.
@@ -428,14 +417,13 @@ int SecureSocket::secureAccept(int socket)
     LOG_WARN("client connection may not be secure");
     m_secureReady = false;
     Arch::sleep(1);
-    retry = 0;
+    m_acceptRetry = 0;
     return -1; // Failed, error out
   }
 
   // If not fatal and no retry, state is good
-  if (retry == 0) {
+  if (m_acceptRetry == 0) {
     if (m_securityLevel == SecurityLevel::PeerAuth && !verifyCertFingerprint(Settings::tlsTrustedClientsDb())) {
-      retry = 0;
       disconnect();
       return -1; // Fail
     }
@@ -447,7 +435,7 @@ int SecureSocket::secureAccept(int socket)
   }
 
   // If not fatal and retry is set, not ready, and return retry
-  if (retry > 0) {
+  if (m_acceptRetry > 0) {
     LOG_DEBUG2("retry accepting secure socket");
     m_secureReady = false;
     Arch::sleep(s_retryDelay);
@@ -481,25 +469,23 @@ int SecureSocket::secureConnect(int socket)
   SSL_set1_host(m_ssl->m_ssl, name.c_str());
   int r = SSL_connect(m_ssl->m_ssl);
 
-  static int retry;
-
-  checkResult(r, retry);
+  checkResult(r, m_connectRetry);
 
   if (isFatal()) {
     LOG_ERR("failed to connect secure socket");
-    retry = 0;
+    m_connectRetry = 0;
     return -1;
   }
 
   // If we should retry, not ready and return 0
-  if (retry > 0) {
+  if (m_connectRetry > 0) {
     LOG_DEBUG2("retry connect secure socket");
     m_secureReady = false;
     Arch::sleep(s_retryDelay);
     return 0;
   }
 
-  retry = 0;
+  m_connectRetry = 0;
   // No error, set ready, process and return ok
   m_secureReady = true;
   if (verifyCertFingerprint(Settings::tlsTrustedServersDb())) {
@@ -565,6 +551,14 @@ void SecureSocket::checkResult(int status, int &retry)
     // select action actually triggers on a write. This isn't necessary for
     // m_readable because the socket logic is always readable
     setWritable(true);
+    // OpenSSL owns the descriptor, so the "would block" that just happened
+    // never passed through ARCH->writeSocket() and the arch layer still
+    // believes the socket is writable.  Tell it otherwise, or pollSocket()
+    // will return immediately with a zero timeout and we will spin on this
+    // retry at 100% of a core until the peer drains its receive window.
+    if (getSocket() != nullptr) {
+      ARCH->setPollWriteOnSocket(getSocket(), true);
+    }
     retry++;
     LOG_DEBUG2("want to write, error=%d, attempt=%d", errorCode, retry);
     break;

@@ -557,6 +557,13 @@ size_t ArchNetworkWinsock::writeSocket(ArchSocket s, const void *buf, size_t len
   return static_cast<size_t>(n);
 }
 
+void ArchNetworkWinsock::setPollWriteOnSocket(ArchSocket s, bool pollWrite)
+{
+  assert(s != nullptr);
+
+  s->m_pollWrite = pollWrite;
+}
+
 void ArchNetworkWinsock::throwErrorOnSocket(ArchSocket s)
 {
   assert(s != nullptr);
